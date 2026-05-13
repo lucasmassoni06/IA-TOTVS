@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+:root {
+  --background: 224 71% 4%;
+  --foreground: 0 0% 98%;
+  --accent: 262 83% 70%;
+  --accent-foreground: 0 0% 98%;
+  --font-display: "DM Serif Display", serif;
+  --font-body: "Inter", sans-serif;
+}
+
+.dark {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 10%;
+  --accent: 262 83% 58%;
+  --accent-foreground: 0 0% 98%;
+}
+
+@theme {
+  --font-family-display: var(--font-display);
+  --font-family-body: var(--font-body);
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+}
+
+html {
+  font-family: var(--font-body);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  line-height: 1.5;
+}
