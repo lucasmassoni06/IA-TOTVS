@@ -14,8 +14,10 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statsLoading, setStatsLoading] = useState(true);
+  const [transcricaoQuery, setTranscricaoQuery] = useState('');
+  const [transcricaoResults, setTranscricaoResults] = useState([]);
+  const [transcricaoLoading, setTranscricaoLoading] = useState(false);
 
-  // Buscar stats gerais (só quando SEM search)
   useEffect(() => {
     if (searchTerm) return;
     setStatsLoading(true);
@@ -25,33 +27,25 @@ function App() {
       .catch(() => setStatsLoading(false));
   }, [searchTerm]);
 
-  // Buscar meetings (COM ou SEM search) - SEMPRE executa quando searchTerm muda
   useEffect(() => {
     setLoading(true);
-    const params = new URLSearchParams();
-    params.append('page', '1');
-    params.append('page_size', '2000');
+    const params = new URLSearchParams({ page: '1', page_size: '2000' });
     if (searchTerm && searchTerm.trim() !== '') {
       params.append('search', searchTerm.trim());
     }
     fetch(`${API}/reunioes?${params.toString()}`)
       .then(r => r.json())
       .then(r => {
-        const data = r.data || [];
-        setMeetings(data);
+        setMeetings(r.data || []);
         setLoading(false);
       })
-      .catch(() => {
-        setMeetings([]);
-        setLoading(false);
-      });
+      .catch(() => { setMeetings([]); setLoading(false); });
     
     setSelectedMeetingId(null);
     setSelectedMeeting(null);
     setSelectedLinhas([]);
   }, [searchTerm]);
 
-  // Buscar detalhe da reunião
   useEffect(() => {
     if (!selectedMeetingId) {
       setSelectedMeeting(null);
@@ -67,13 +61,32 @@ function App() {
       .catch(() => { setSelectedMeeting(null); setSelectedLinhas([]); });
   }, [selectedMeetingId]);
 
+  // Busca de transcrições com debounce
+  useEffect(() => {
+    if (!transcricaoQuery || transcricaoQuery.trim() === '') {
+      setTranscricaoResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setTranscricaoLoading(true);
+      fetch(`${API}/analises/palavras-chave?q=${encodeURIComponent(transcricaoQuery.trim())}`)
+        .then(r => r.json())
+        .then(data => {
+          const list = Array.isArray(data) ? data : (data.data || []);
+          setTranscricaoResults(list);
+          setTranscricaoLoading(false);
+        })
+        .catch(() => { setTranscricaoResults([]); setTranscricaoLoading(false); });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [transcricaoQuery]);
+
   const safeMax = (arr) => {
     if (!arr || !Array.isArray(arr) || arr.length === 0) return 1;
     const m = Math.max(...arr.map(x => x.count || 0));
     return m > 0 ? m : 1;
   };
 
-  // Stats locais: calculados SEMPRE a partir de meetings quando searchTerm existe
   const localStats = React.useMemo(() => {
     if (!searchTerm || !meetings.length) return null;
     const total = meetings.length;
@@ -141,9 +154,7 @@ function App() {
               {(stats.reunioes_por_uf || []).map((item, i) => (
                 <div key={i} className="bar-row">
                   <span className="bar-label">{item.UF || '—'}</span>
-                  <div className="bar-track">
-                    <div className="bar-fill" style={{width: `${(item.count / safeMax(stats.reunioes_por_uf)) * 100}%`}} />
-                  </div>
+                  <div className="bar-track"><div className="bar-fill" style={{width: `${(item.count / safeMax(stats.reunioes_por_uf)) * 100}%`}} /></div>
                   <span className="bar-count">{item.count}</span>
                 </div>
               ))}
@@ -155,9 +166,7 @@ function App() {
               {(stats.segmentos_mais_comuns || []).map((item, i) => (
                 <div key={i} className="bar-row">
                   <span className="bar-label">{item.NOME_SEGMENTO || 'Não informado'}</span>
-                  <div className="bar-track">
-                    <div className="bar-fill purple" style={{width: `${(item.count / safeMax(stats.segmentos_mais_comuns)) * 100}%`}} />
-                  </div>
+                  <div className="bar-track"><div className="bar-fill purple" style={{width: `${(item.count / safeMax(stats.segmentos_mais_comuns)) * 100}%`}} /></div>
                   <span className="bar-count">{item.count}</span>
                 </div>
               ))}
@@ -169,9 +178,7 @@ function App() {
               {(stats.reunioes_por_mes || []).map((item, i) => (
                 <div key={i} className="bar-row">
                   <span className="bar-label">{item.mes || '—'}</span>
-                  <div className="bar-track">
-                    <div className="bar-fill orange" style={{width: `${(item.count / safeMax(stats.reunioes_por_mes)) * 100}%`}} />
-                  </div>
+                  <div className="bar-track"><div className="bar-fill orange" style={{width: `${(item.count / safeMax(stats.reunioes_por_mes)) * 100}%`}} /></div>
                   <span className="bar-count">{item.count}</span>
                 </div>
               ))}
@@ -183,9 +190,7 @@ function App() {
               {(stats.faixa_faturamento_count || []).slice(0, 10).map((item, i) => (
                 <div key={i} className="bar-row">
                   <span className="bar-label small">{item.faixa || '—'}</span>
-                  <div className="bar-track">
-                    <div className="bar-fill green" style={{width: `${(item.count / safeMax(stats.faixa_faturamento_count)) * 100}%`}} />
-                  </div>
+                  <div className="bar-track"><div className="bar-fill green" style={{width: `${(item.count / safeMax(stats.faixa_faturamento_count)) * 100}%`}} /></div>
                   <span className="bar-count">{item.count}</span>
                 </div>
               ))}
@@ -202,9 +207,7 @@ function App() {
               {[...displayStats.reunioes_por_uf].sort((a, b) => b.count - a.count).map((item, i) => (
                 <div key={i} className="bar-row">
                   <span className="bar-label">{item.UF || '—'}</span>
-                  <div className="bar-track">
-                    <div className="bar-fill" style={{width: `${(item.count / safeMax(displayStats.reunioes_por_uf)) * 100}%`}} />
-                  </div>
+                  <div className="bar-track"><div className="bar-fill" style={{width: `${(item.count / safeMax(displayStats.reunioes_por_uf)) * 100}%`}} /></div>
                   <span className="bar-count">{item.count}</span>
                 </div>
               ))}
@@ -216,9 +219,7 @@ function App() {
               {displayStats.segmentos_mais_comuns.map((item, i) => (
                 <div key={i} className="bar-row">
                   <span className="bar-label">{item.NOME_SEGMENTO || 'Não informado'}</span>
-                  <div className="bar-track">
-                    <div className="bar-fill purple" style={{width: `${(item.count / safeMax(displayStats.segmentos_mais_comuns)) * 100}%`}} />
-                  </div>
+                  <div className="bar-track"><div className="bar-fill purple" style={{width: `${(item.count / safeMax(displayStats.segmentos_mais_comuns)) * 100}%`}} /></div>
                   <span className="bar-count">{item.count}</span>
                 </div>
               ))}
@@ -237,7 +238,6 @@ function App() {
           <h2 className="page-title">👥 Reuniões</h2>
           <p className="page-subtitle">
             {meetings.length} reuniões encontradas{searchTerm ? ` para "${searchTerm}"` : ''}
-            {!searchTerm && meetings.length >= 2000 && ' (limitado a 2000)'}
           </p>
           <div className="meetings-table-wrapper">
             <table className="meetings-table">
@@ -274,6 +274,7 @@ function App() {
         </div>
       );
     }
+
     return (
       <div className="page-reunioes">
         <button className="back-btn" onClick={() => setSelectedMeetingId(null)}>← Voltar para lista</button>
@@ -291,15 +292,34 @@ function App() {
             <div className="detail-item"><strong>Segmento:</strong> {selectedMeeting.nome_segmento || 'Não informado'}</div>
             <div className="detail-item"><strong>NPS:</strong> {selectedMeeting.nota_nps ? selectedMeeting.nota_nps.toFixed(1) : '—'}</div>
           </div>
+
+          {/* TRANSCRIÇÃO: linhas individuais SEMPRE visíveis */}
           {selectedLinhas.length > 0 && (
             <div className="transcricoes">
-              <h3>📝 Transcrições ({selectedLinhas.length})</h3>
-              {selectedLinhas.map((l, i) => (
-                <div key={i} className="transcricao-item">
-                  <strong>#{i + 1}</strong>
-                  <p>{(l.ANON_TRANSCRICAO || '').substring(0, 400)}{(l.ANON_TRANSCRICAO || '').length > 400 ? '...' : ''}</p>
-                </div>
-              ))}
+              <h3>📝 Transcrição por Locutor</h3>
+              <div className="transcricao-linhas">
+                {selectedLinhas.flatMap((l, idx) => {
+                  const texto = l.ANON_TRANSCRICAO || '';
+                  // Quebrar o texto nos padrões de locutor: [LOCUTOR N]:, [LOCAL]:, [PESSOA]:, [EMPRESA]:
+                  const falas = texto.split(/(?=\[LOCUTOR \d+\]:|\[LOCAL\]:|\[PESSOA\]:|\[EMPRESA\]:)/g);
+                  return falas.filter(f => f.trim()).map((fala, i) => (
+                    <div key={`${idx}-${i}`} className="transcricao-item">
+                      {fala.trim()}
+                    </div>
+                  ));
+                })}
+              </div>
+
+              {selectedMeeting.transcricao_completa && (
+                <details style={{ marginTop: 20 }}>
+                  <summary className="transcricao-summary">
+                    📄 Ver texto completo da transcrição
+                  </summary>
+                  <div className="transcricao-completa">
+                    {selectedMeeting.transcricao_completa}
+                  </div>
+                </details>
+              )}
             </div>
           )}
         </div>
@@ -307,11 +327,86 @@ function App() {
     );
   };
 
+  const renderTranscricoes = () => (
+    <div className="page-transcricoes">
+      <h2 className="page-title">📝 Transcrições</h2>
+      <p className="page-subtitle">Busque por palavras-chave nas transcrições das reuniões</p>
+
+      <div className="transcricao-search">
+        <span className="transcricao-search-icon">🔍</span>
+        <input
+          type="text"
+          className="transcricao-search-input"
+          placeholder="Digite uma palavra-chave para buscar nas transcrições..."
+          value={transcricaoQuery}
+          onChange={(e) => setTranscricaoQuery(e.target.value)}
+        />
+        {transcricaoQuery && (
+          <button className="transcricao-search-clear" onClick={() => setTranscricaoQuery('')}>✕</button>
+        )}
+      </div>
+
+      {transcricaoQuery && transcricaoQuery.trim() !== '' && (
+        <>
+          <div className="transcricao-stats">
+            <div className="transcricao-stat-card">
+              <span className="transcricao-stat-value">{transcricaoResults.length}</span>
+              <span className="transcricao-stat-label">Reuniões encontradas</span>
+            </div>
+            <div className="transcricao-stat-card">
+              <span className="transcricao-stat-value">"{transcricaoQuery}"</span>
+              <span className="transcricao-stat-label">Termo buscado</span>
+            </div>
+          </div>
+
+          {transcricaoLoading ? (
+            <div className="loading" style={{minHeight: 200}}>Buscando nas transcrições...</div>
+          ) : transcricaoResults.length === 0 ? (
+            <div className="empty-state" style={{minHeight: 150}}>
+              Nenhuma transcrição encontrada para "{transcricaoQuery}"
+            </div>
+          ) : (
+            <div className="transcricao-results">
+              {transcricaoResults.map((item, i) => (
+                <div
+                  key={i}
+                  className="transcricao-result-card"
+                  onClick={() => {
+                    setSelectedMeetingId(item.ID_MEETING);
+                    setActivePage('reunioes');
+                  }}
+                >
+                  <div className="transcricao-result-header">
+                    <span className="transcricao-result-id">#{item.ID_MEETING}</span>
+                    <span className="transcricao-result-date">
+                      {item.dt_meeting ? new Date(item.dt_meeting).toLocaleDateString('pt-BR') : '—'}
+                    </span>
+                    <span className="transcricao-result-unidade">{item.nome_unidade || '—'}</span>
+                  </div>
+                  <div className="transcricao-result-trecho">
+                    {item.trecho || '(trecho não disponível)'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {(!transcricaoQuery || transcricaoQuery.trim() === '') && (
+        <div className="empty-state" style={{minHeight: 250}}>
+          🔍 Digite uma palavra-chave acima para buscar nas transcrições
+        </div>
+      )}
+    </div>
+  );
+
   const getPageContent = () => {
-    if (loading && !meetings.length) return <div className="loading">Carregando...</div>;
+    if (loading && !meetings.length && activePage !== 'transcricoes') return <div className="loading">Carregando...</div>;
     switch (activePage) {
       case 'dashboard': return renderDashboard();
       case 'reunioes': return renderReunioes();
+      case 'transcricoes': return renderTranscricoes();
       default: return <div className="empty-state">Página em construção 🚧</div>;
     }
   };

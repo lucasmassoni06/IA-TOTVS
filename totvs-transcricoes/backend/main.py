@@ -100,16 +100,17 @@ async def get_reunioes(search: str = Query(""), page: int = Query(1), page_size:
 async def get_reuniao(id_meeting: str):
     summary_query = f"""
         SELECT ID_MEETING,
-               MAX(DT_MEETING) as dt_meeting,
-               MAX(FORMATO_MEETING) as formato_meeting,
-               MAX(STATUS_MEETING) as status_meeting,
-               AVG({DURACAO_MIN}) as duracao_minutos,
-               COUNT(*) as total_linhas,
-               MAX(NOME_UNIDADE) as nome_unidade,
-               MAX(UF) as uf,
-               MAX(NOME_SEGMENTO) as nome_segmento,
-               MAX(FAIXA_FATURAMENTO_CLIENTE_EC) as faixa_faturamento,
-               MAX(NOTA_NPS) as nota_nps
+        MAX(DT_MEETING) as dt_meeting,
+        MAX(FORMATO_MEETING) as formato_meeting,
+        MAX(STATUS_MEETING) as status_meeting,
+        AVG({DURACAO_MIN}) as duracao_minutos,
+        COUNT(*) as total_linhas,
+        MAX(NOME_UNIDADE) as nome_unidade,
+        MAX(UF) as uf,
+        MAX(NOME_SEGMENTO) as nome_segmento,
+        MAX(FAIXA_FATURAMENTO_CLIENTE_EC) as faixa_faturamento,
+        MAX(NOTA_NPS) as nota_nps,
+        GROUP_CONCAT(ANON_TRANSCRICAO, ' ') as transcricao_completa
         FROM reunioes
         WHERE ID_MEETING = ?
         GROUP BY ID_MEETING
@@ -121,7 +122,7 @@ async def get_reuniao(id_meeting: str):
     all_rows_query = "SELECT * FROM reunioes WHERE ID_MEETING = ? ORDER BY DT_MEETING DESC"
     linhas = await sync_run_query(all_rows_query, (id_meeting,))
 
-    return {"summary": summary, "linhas": linhas}
+    return {"resumo": summary, "linhas": linhas}
 
 @app.get("/estatisticas/gerais")
 async def estatisticas_gerais():
@@ -197,20 +198,28 @@ async def estatisticas_reuniao(id_meeting: str):
 
 @app.get("/analises/palavras-chave")
 async def analises_palavras_chave(q: str = Query(...)):
+    q = q.strip()
     if not q:
         return []
-    termo = f"%{q}%"
+    termo_upper = q.upper()
+    termo_like = f"%{termo_upper}%"
+    
     query = """
-        SELECT ID_MEETING,
-        MAX(DT_MEETING) as dt_meeting,
-        SUBSTR(ANON_TRANSCRICAO, 1, 150) as trecho,
-        MAX(NOME_UNIDADE) as nome_unidade
+        SELECT 
+            ID_MEETING,
+            DT_MEETING as dt_meeting,
+            NOME_UNIDADE as nome_unidade,
+            SUBSTR(
+                ANON_TRANSCRICAO,
+                MAX(1, INSTR(UPPER(ANON_TRANSCRICAO), ?) - 60),
+                150
+            ) as trecho
         FROM reunioes
-        WHERE ANON_TRANSCRICAO LIKE ?
-        GROUP BY ID_MEETING
+        WHERE UPPER(ANON_TRANSCRICAO) LIKE ?
+        ORDER BY DT_MEETING DESC
         LIMIT 50
     """
-    return await sync_run_query(query, (termo,))
+    return await sync_run_query(query, (termo_upper, termo_like))
 
 if __name__ == "__main__":
     import uvicorn
