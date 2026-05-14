@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
 const Layout = ({
+  children,
   activePage,
   onNavigate,
   userName,
@@ -8,8 +9,7 @@ const Layout = ({
   meetings,
   selectedMeetingId,
   onSelectMeeting,
-  onSearchMeetings,
-  children
+  onSearchMeetings
 }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [searchValue, setSearchValue] = useState('');
@@ -26,132 +26,154 @@ const Layout = ({
   };
 
   const getStatusEmoji = (status) => {
-    switch (status) {
+    switch ((status || '').toUpperCase()) {
       case 'COMPLETED': return '🟢';
       case 'CANCELED': return '🔴';
       case 'SCHEDULED': return '🟡';
       case 'IN_PROGRESS': return '🟠';
-      default: return '';
+      default: return '⚪';
     }
   };
 
   const navItems = [
-    { icon: '📊', label: 'Dashboard', page: 'dashboard' },
-    { icon: '👥', label: 'Reuniões', page: 'reunioes' },
-    { icon: '📝', label: 'Transcrições', page: 'transcricoes' },
-    { icon: '📈', label: 'Análises', page: 'analises' },
-    { icon: '⚙️', label: 'Configurações', page: 'configuracoes' }
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'reunioes', label: 'Reuniões', icon: '👥' },
+    { id: 'transcricoes', label: 'Transcrições', icon: '📝' },
+    { id: 'analises', label: 'Análises', icon: '📈' },
+    { id: 'configuracoes', label: 'Configurações', icon: '⚙️' }
   ];
 
   return (
-    <div className="flex" style={{ height: '100vh', overflow: 'hidden' }}>
-      <aside className="w-72 bg-black text-white flex flex-col flex-shrink-0 p-6" style={{ height: '100vh', overflow: 'hidden' }}>
-        <div className="text-2xl font-bold mb-6 text-white tracking-tight flex-shrink-0">
-          TOTVS
-          <div className="text-xl font-normal text-yellow-400">Transcrições</div>
+    <div className="flex flex-col lg:flex-row min-h-screen bg-gray-50">
+      <aside className="w-full lg:w-80 bg-[#0f1419] text-white flex flex-col lg:h-screen">
+        {/* Logo */}
+        <div className="sidebar-logo p-6 border-b border-gray-800">
+          <h1 className="text-2xl font-bold text-[#005CA9] tracking-tight">
+            TOTVS Transcrições
+          </h1>
         </div>
 
-        <nav className="space-y-1 mb-6 flex-shrink-0">
+        {/* Navigation */}
+        <nav className="px-4 py-6 space-y-2 flex-shrink-0">
           {navItems.map((item) => (
             <button
-              key={item.page}
-              onClick={() => onNavigate(item.page)}
-              className={`w-full text-left p-3 rounded-lg flex items-center space-x-3 transition-colors ${
-                activePage === item.page
-                  ? 'bg-gray-700 text-white'
-                  : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+              key={item.id}
+              className={`nav-item w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                activePage === item.id
+                  ? 'active bg-[#005CA9] text-white shadow-lg'
+                  : 'hover:bg-[#1a1f2e] text-gray-200'
               }`}
+              onClick={() => onNavigate(item.id)}
             >
-              <span>{item.icon}</span>
+              <span className="text-lg flex-shrink-0">{item.icon}</span>
               <span>{item.label}</span>
             </button>
           ))}
         </nav>
 
-        <div className="space-y-3 flex-1 flex flex-col min-h-0">
-          <div className="flex justify-between items-center flex-shrink-0">
-            <h3 className="font-semibold text-lg">Reuniões</h3>
-            <button
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className="text-gray-400 hover:text-white transition-colors"
-            >
-              {isFilterOpen ? '▲' : '▼'}
-            </button>
+        {/* Filter Section */}
+        <div className="border-t border-gray-700 px-4 py-6 flex-1 flex flex-col min-h-0">
+          <div
+            className="flex items-center justify-between mb-4 cursor-pointer select-none flex-shrink-0"
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+          >
+            <span className="text-lg font-semibold flex items-center gap-2">
+              📋 Reuniões
+            </span>
+            <span className="sidebar-badge bg-[#FEAC0E] text-black px-2 py-1 rounded-full text-xs font-medium">
+              {meetings?.length ?? 0}
+            </span>
           </div>
-          <div className="relative flex-shrink-0">
-            <input
-              type="text"
-              value={searchValue}
-              onChange={handleSearch}
-              placeholder="Buscar reuniões..."
-              className="w-full bg-gray-800 border border-gray-700 text-white p-3 rounded-lg pr-10 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-            />
-            {searchValue && (
-              <button
-                onClick={handleClear}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          {isFilterOpen && (
-            <div className="flex-1 overflow-y-auto space-y-2 pt-3 border-t border-gray-700 min-h-0">
-              {meetings.length === 0 ? (
-                <div className="text-gray-400 text-center py-8 text-sm">
-                  Nenhuma reunião encontrada
-                </div>
-              ) : (
-                meetings.map((meeting) => {
-                  const meetingId = meeting.id_meeting;
-                  const title = meeting.nome_unidade || meetingId;
-                  const dateFormatted = meeting.dt_meeting
-                    ? new Date(meeting.dt_meeting).toLocaleDateString('pt-BR')
-                    : '—';
-                  const duracao = meeting.duracao_minutos
-                    ? meeting.duracao_minutos.toFixed(1)
-                    : '?';
-                  const statusEmoji = getStatusEmoji(meeting.status_meeting);
-                  const npsText = meeting.nota_nps
-                    ? `• NPS ${meeting.nota_nps.toFixed(1)}`
-                    : '';
-                  const isSelected = selectedMeetingId && selectedMeetingId === meetingId;
 
-                  return (
-                    <div
-                      key={meetingId || Math.random()}
-                      onClick={() => onSelectMeeting(meetingId)}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors flex flex-col ${
-                        isSelected
-                          ? 'bg-blue-900/50 border border-blue-500/50'
-                          : 'hover:bg-gray-800'
-                      }`}
-                    >
-                      <div className="font-semibold text-sm mb-1 truncate">{title}</div>
-                      <div className="text-xs text-gray-300 mb-1">
-                        {dateFormatted} • {duracao} min
+          {isFilterOpen && (
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* Search Input */}
+              <div className="relative mb-4 flex-shrink-0">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg pointer-events-none">
+                  🔍
+                </span>
+                <input
+                  className="sidebar-search-input w-full pl-10 pr-10 py-2.5 bg-[#1a1f2e] border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-[#005CA9] focus:border-2 transition-colors"
+                  placeholder="Buscar reuniões..."
+                  value={searchValue}
+                  onChange={handleSearch}
+                />
+                {searchValue && (
+                  <button
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 transition-colors"
+                    onClick={handleClear}
+                    type="button"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Meetings List */}
+              <div className="sidebar-scroll flex-1 overflow-y-auto space-y-2 pr-1 -mr-1">
+                {meetings?.length > 0 ? (
+                  meetings.map((meeting) => {
+                    const mid = meeting.id_meeting;
+                    const title = meeting.nome_unidade || `Reunião ${mid}`;
+                    const dateFormatted = meeting.dt_meeting
+                      ? new Date(meeting.dt_meeting).toLocaleDateString('pt-BR')
+                      : '—';
+                    const dur = meeting.duracao_minutos ? meeting.duracao_minutos.toFixed(0) : '?';
+                    const isSelected = selectedMeetingId && selectedMeetingId === mid;
+                    const statusEmoji = getStatusEmoji(meeting.status_meeting);
+
+                    return (
+                      <div
+                        key={mid}
+                        className={`sidebar-meeting-card p-3 rounded-xl cursor-pointer transition-all border-2 hover:bg-[#1a1f2e] hover:border-gray-500 ${
+                          isSelected
+                            ? 'selected border-[#005CA9] bg-[#005CA9]/20'
+                            : 'border-transparent'
+                        }`}
+                        onClick={() => onSelectMeeting(mid)}
+                      >
+                        <div className="meeting-title font-medium text-sm truncate pr-2">
+                          {title}
+                        </div>
+                        <div className="meeting-meta flex items-center gap-2 mt-1 text-xs text-gray-400">
+                          <span>{dateFormatted}</span>
+                          <span>•</span>
+                          <span>{dur} min</span>
+                          <span className="ml-auto text-base flex-shrink-0">{statusEmoji}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+                          <span>{meeting.formato_meeting || '—'}</span>
+                          <span>•</span>
+                          <span>{meeting.uf || '—'}</span>
+                          {meeting.nota_nps && (
+                            <>
+                              <span>•</span>
+                              <span>NPS {meeting.nota_nps.toFixed(1)}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-400 flex items-center justify-between">
-                        <span>
-                          {meeting.formato_meeting || '—'} {meeting.uf || '—'} {npsText}
-                        </span>
-                        <span>{statusEmoji}</span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                    );
+                  })
+                ) : (
+                  <div className="text-gray-500 text-center py-12 text-sm">
+                    Nenhuma reunião encontrada
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
 
-        <div className="mt-auto pt-6 border-t border-gray-800 flex-shrink-0">
-          <div className="font-semibold text-sm mb-1 truncate">{userName}</div>
-          <div className="text-xs text-gray-400 truncate">{userEmail}</div>
+        {/* User Info */}
+        <div className="border-t border-gray-700 p-4 flex-shrink-0">
+          <div className="font-medium text-sm truncate">Olá, {userName}</div>
+          <div className="text-xs text-gray-400 truncate mt-0.5">{userEmail}</div>
         </div>
       </aside>
 
-      <main className="flex-1" style={{ height: '100vh', overflowY: 'auto' }}>
+      {/* Main Content */}
+      <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
         {children}
       </main>
     </div>

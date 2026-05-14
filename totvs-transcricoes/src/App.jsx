@@ -4,6 +4,25 @@ import Layout from './components/Layout';
 
 const API = 'http://localhost:8000';
 
+// Normaliza os campos da API (maiúsculo ou minúsculo)
+function normalize(m) {
+  return {
+    id_meeting: m.id_meeting || m.ID_MEETING,
+    dt_meeting: m.dt_meeting || m.DT_MEETING,
+    formato_meeting: m.formato_meeting || m.FORMATO_MEETING,
+    status_meeting: m.status_meeting || m.STATUS_MEETING,
+    duracao_minutos: m.duracao_minutos || m.DURACAO_MINUTOS,
+    nome_unidade: m.nome_unidade || m.NOME_UNIDADE,
+    uf: m.uf || m.UF,
+    nome_segmento: m.nome_segmento || m.NOME_SEGMENTO,
+    faixa_faturamento: m.faixa_faturamento || m.FAIXA_FATURAMENTO,
+    nota_nps: m.nota_nps || m.NOTA_NPS,
+    total_linhas: m.total_linhas || m.TOTAL_LINHAS,
+    ANON_TRANSCRICAO: m.ANON_TRANSCRICAO,
+    transcricao_completa: m.transcricao_completa || m.TRANSCRICAO_COMPLETA,
+  };
+}
+
 function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [meetings, setMeetings] = useState([]);
@@ -12,40 +31,41 @@ function App() {
   const [selectedLinhas, setSelectedLinhas] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   const [statsLoading, setStatsLoading] = useState(true);
   const [transcricaoQuery, setTranscricaoQuery] = useState('');
   const [transcricaoResults, setTranscricaoResults] = useState([]);
   const [transcricaoLoading, setTranscricaoLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
+  // Stats
   useEffect(() => {
-    if (searchTerm) return;
     setStatsLoading(true);
     fetch(`${API}/estatisticas/gerais`)
       .then(r => r.json())
       .then(d => { setStats(d || {}); setStatsLoading(false); })
       .catch(() => setStatsLoading(false));
-  }, [searchTerm]);
+  }, []);
 
+  // Meetings
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams({ page: '1', page_size: '2000' });
-    if (searchTerm && searchTerm.trim() !== '') {
-      params.append('search', searchTerm.trim());
-    }
-    fetch(`${API}/reunioes?${params.toString()}`)
+    if (searchTerm) params.append('search', searchTerm);
+    fetch(`${API}/reunioes?${params}`)
       .then(r => r.json())
       .then(r => {
-        setMeetings(r.data || []);
+        const data = (r.data || []).map(normalize);
+        setMeetings(data);
         setLoading(false);
       })
       .catch(() => { setMeetings([]); setLoading(false); });
-    
+
     setSelectedMeetingId(null);
     setSelectedMeeting(null);
     setSelectedLinhas([]);
   }, [searchTerm]);
 
+  // Detalhe da reunião
   useEffect(() => {
     if (!selectedMeetingId) {
       setSelectedMeeting(null);
@@ -55,13 +75,17 @@ function App() {
     fetch(`${API}/reunioes/${selectedMeetingId}`)
       .then(r => r.json())
       .then(r => {
-        setSelectedMeeting(r.resumo || r);
-        setSelectedLinhas(r.linhas || []);
+        const resumo = normalize(r.resumo || r);
+        const linhas = (r.linhas || []).map(l => ({
+          ANON_TRANSCRICAO: l.ANON_TRANSCRICAO || l.anon_transcricao || l.anon_transcricao || (typeof l === 'string' ? l : ''),
+        }));
+        setSelectedMeeting(resumo);
+        setSelectedLinhas(linhas);
       })
       .catch(() => { setSelectedMeeting(null); setSelectedLinhas([]); });
   }, [selectedMeetingId]);
 
-  // Busca de transcrições com debounce
+  // Busca transcrições
   useEffect(() => {
     if (!transcricaoQuery || transcricaoQuery.trim() === '') {
       setTranscricaoResults([]);
@@ -102,6 +126,10 @@ function App() {
     return {
       total_reunioes: total,
       duracao_media_minutos: duracao,
+      total_clientes: null,
+      total_unidades: null,
+      nps_medio: null,
+      total_transcricoes: total,
       reunioes_por_uf: Object.entries(ufCount).map(([UF, count]) => ({ UF, count })),
       segmentos_mais_comuns: Object.entries(segCount).map(([NOME_SEGMENTO, count]) => ({ NOME_SEGMENTO, count })).sort((a, b) => b.count - a.count)
     };
@@ -111,8 +139,6 @@ function App() {
 
   const renderDashboard = () => (
     <div className="dashboard">
-      {searchTerm && <div className="filter-badge">🔍 Filtrado por: <strong>"{searchTerm}"</strong></div>}
-      
       <div className="stats-grid">
         <div className="stat-card">
           <span className="stat-icon">🎯</span>
@@ -146,7 +172,7 @@ function App() {
         </div>
       </div>
 
-      {!searchTerm && !statsLoading && (
+      {!statsLoading && (
         <div className="charts-grid">
           <div className="chart-card">
             <h3>🗺️ Reuniões por Estado</h3>
@@ -196,30 +222,25 @@ function App() {
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {searchTerm && displayStats.segmentos_mais_comuns && displayStats.segmentos_mais_comuns.length > 0 && (
-        <div className="charts-grid">
           <div className="chart-card">
-            <h3>🗺️ Estados (filtrados)</h3>
+            <h3>📹 Por Formato</h3>
             <div className="bar-list">
-              {[...displayStats.reunioes_por_uf].sort((a, b) => b.count - a.count).map((item, i) => (
+              {(stats.reunioes_por_formato || []).map((item, i) => (
                 <div key={i} className="bar-row">
-                  <span className="bar-label">{item.UF || '—'}</span>
-                  <div className="bar-track"><div className="bar-fill" style={{width: `${(item.count / safeMax(displayStats.reunioes_por_uf)) * 100}%`}} /></div>
+                  <span className="bar-label">{item.FORMATO_MEETING || '—'}</span>
+                  <div className="bar-track"><div className="bar-fill teal" style={{width: `${(item.count / safeMax(stats.reunioes_por_formato)) * 100}%`}} /></div>
                   <span className="bar-count">{item.count}</span>
                 </div>
               ))}
             </div>
           </div>
           <div className="chart-card">
-            <h3>🏭 Segmentos (filtrados)</h3>
+            <h3>✅ Por Status</h3>
             <div className="bar-list">
-              {displayStats.segmentos_mais_comuns.map((item, i) => (
+              {(stats.reunioes_por_status || []).map((item, i) => (
                 <div key={i} className="bar-row">
-                  <span className="bar-label">{item.NOME_SEGMENTO || 'Não informado'}</span>
-                  <div className="bar-track"><div className="bar-fill purple" style={{width: `${(item.count / safeMax(displayStats.segmentos_mais_comuns)) * 100}%`}} /></div>
+                  <span className="bar-label">{item.STATUS_MEETING || '—'}</span>
+                  <div className="bar-track"><div className="bar-fill pink" style={{width: `${(item.count / safeMax(stats.reunioes_por_status)) * 100}%`}} /></div>
                   <span className="bar-count">{item.count}</span>
                 </div>
               ))}
@@ -227,7 +248,6 @@ function App() {
           </div>
         </div>
       )}
-      {!searchTerm && statsLoading && <div className="loading" style={{minHeight: 200}}>Carregando gráficos...</div>}
     </div>
   );
 
@@ -238,6 +258,7 @@ function App() {
           <h2 className="page-title">👥 Reuniões</h2>
           <p className="page-subtitle">
             {meetings.length} reuniões encontradas{searchTerm ? ` para "${searchTerm}"` : ''}
+            — clique em uma linha para ver os detalhes
           </p>
           <div className="meetings-table-wrapper">
             <table className="meetings-table">
@@ -256,7 +277,7 @@ function App() {
               </thead>
               <tbody>
                 {meetings.map(m => (
-                  <tr key={m.id_meeting} onClick={() => setSelectedMeetingId(m.id_meeting)} className="clickable-row">
+                  <tr key={m.id_meeting} onClick={() => { setSelectedMeetingId(m.id_meeting); }} className="clickable-row">
                     <td className="cell-id">{m.id_meeting}</td>
                     <td>{m.dt_meeting ? new Date(m.dt_meeting).toLocaleDateString('pt-BR') : '—'}</td>
                     <td><span className="badge badge-formato">{m.formato_meeting || '—'}</span></td>
@@ -274,7 +295,6 @@ function App() {
         </div>
       );
     }
-
     return (
       <div className="page-reunioes">
         <button className="back-btn" onClick={() => setSelectedMeetingId(null)}>← Voltar para lista</button>
@@ -292,15 +312,12 @@ function App() {
             <div className="detail-item"><strong>Segmento:</strong> {selectedMeeting.nome_segmento || 'Não informado'}</div>
             <div className="detail-item"><strong>NPS:</strong> {selectedMeeting.nota_nps ? selectedMeeting.nota_nps.toFixed(1) : '—'}</div>
           </div>
-
-          {/* TRANSCRIÇÃO: linhas individuais SEMPRE visíveis */}
           {selectedLinhas.length > 0 && (
             <div className="transcricoes">
-              <h3>📝 Transcrição por Locutor</h3>
+              <h3>📝 Linhas Individuais da Transcrição ({selectedLinhas.length} falas)</h3>
               <div className="transcricao-linhas">
                 {selectedLinhas.flatMap((l, idx) => {
                   const texto = l.ANON_TRANSCRICAO || '';
-                  // Quebrar o texto nos padrões de locutor: [LOCUTOR N]:, [LOCAL]:, [PESSOA]:, [EMPRESA]:
                   const falas = texto.split(/(?=\[LOCUTOR \d+\]:|\[LOCAL\]:|\[PESSOA\]:|\[EMPRESA\]:)/g);
                   return falas.filter(f => f.trim()).map((fala, i) => (
                     <div key={`${idx}-${i}`} className="transcricao-item">
@@ -309,15 +326,10 @@ function App() {
                   ));
                 })}
               </div>
-
               {selectedMeeting.transcricao_completa && (
                 <details style={{ marginTop: 20 }}>
-                  <summary className="transcricao-summary">
-                    📄 Ver texto completo da transcrição
-                  </summary>
-                  <div className="transcricao-completa">
-                    {selectedMeeting.transcricao_completa}
-                  </div>
+                  <summary className="transcricao-summary">📄 Ver texto completo da transcrição</summary>
+                  <div className="transcricao-completa">{selectedMeeting.transcricao_completa}</div>
                 </details>
               )}
             </div>
@@ -331,22 +343,12 @@ function App() {
     <div className="page-transcricoes">
       <h2 className="page-title">📝 Transcrições</h2>
       <p className="page-subtitle">Busque por palavras-chave nas transcrições das reuniões</p>
-
       <div className="transcricao-search">
         <span className="transcricao-search-icon">🔍</span>
-        <input
-          type="text"
-          className="transcricao-search-input"
-          placeholder="Digite uma palavra-chave para buscar nas transcrições..."
-          value={transcricaoQuery}
-          onChange={(e) => setTranscricaoQuery(e.target.value)}
-        />
-        {transcricaoQuery && (
-          <button className="transcricao-search-clear" onClick={() => setTranscricaoQuery('')}>✕</button>
-        )}
+        <input type="text" className="transcricao-search-input" placeholder="Digite uma palavra-chave..." value={transcricaoQuery} onChange={(e) => setTranscricaoQuery(e.target.value)} />
+        {transcricaoQuery && <button className="transcricao-search-clear" onClick={() => setTranscricaoQuery('')}>✕</button>}
       </div>
-
-      {transcricaoQuery && transcricaoQuery.trim() !== '' && (
+      {transcricaoQuery && (
         <>
           <div className="transcricao-stats">
             <div className="transcricao-stat-card">
@@ -358,46 +360,27 @@ function App() {
               <span className="transcricao-stat-label">Termo buscado</span>
             </div>
           </div>
-
           {transcricaoLoading ? (
-            <div className="loading" style={{minHeight: 200}}>Buscando nas transcrições...</div>
+            <div className="loading">Buscando...</div>
           ) : transcricaoResults.length === 0 ? (
-            <div className="empty-state" style={{minHeight: 150}}>
-              Nenhuma transcrição encontrada para "{transcricaoQuery}"
-            </div>
+            <div className="empty-state">Nenhuma transcrição encontrada para "{transcricaoQuery}"</div>
           ) : (
             <div className="transcricao-results">
               {transcricaoResults.map((item, i) => (
-                <div
-                  key={i}
-                  className="transcricao-result-card"
-                  onClick={() => {
-                    setSelectedMeetingId(item.ID_MEETING);
-                    setActivePage('reunioes');
-                  }}
-                >
+                <div key={i} className="transcricao-result-card" onClick={() => { setSelectedMeetingId(item.ID_MEETING); setActivePage('reunioes'); }}>
                   <div className="transcricao-result-header">
                     <span className="transcricao-result-id">#{item.ID_MEETING}</span>
-                    <span className="transcricao-result-date">
-                      {item.dt_meeting ? new Date(item.dt_meeting).toLocaleDateString('pt-BR') : '—'}
-                    </span>
+                    <span className="transcricao-result-date">{item.dt_meeting ? new Date(item.dt_meeting).toLocaleDateString('pt-BR') : '—'}</span>
                     <span className="transcricao-result-unidade">{item.nome_unidade || '—'}</span>
                   </div>
-                  <div className="transcricao-result-trecho">
-                    {item.trecho || '(trecho não disponível)'}
-                  </div>
+                  <div className="transcricao-result-trecho">{item.trecho || '(trecho)'}</div>
                 </div>
               ))}
             </div>
           )}
         </>
       )}
-
-      {(!transcricaoQuery || transcricaoQuery.trim() === '') && (
-        <div className="empty-state" style={{minHeight: 250}}>
-          🔍 Digite uma palavra-chave acima para buscar nas transcrições
-        </div>
-      )}
+      {!transcricaoQuery && <div className="empty-state">🔍 Digite uma palavra-chave para buscar nas transcrições</div>}
     </div>
   );
 
@@ -419,7 +402,7 @@ function App() {
       userEmail="lucas@totvs.com"
       meetings={meetings}
       selectedMeetingId={selectedMeetingId}
-      onSelectMeeting={(id) => { setSelectedMeetingId(id); setActivePage('reunioes'); }}
+      onSelectMeeting={(id) => { setSelectedMeetingId(id); }}
       onSearchMeetings={setSearchTerm}
     >
       <div className="main-content">{getPageContent()}</div>
