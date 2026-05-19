@@ -22,6 +22,7 @@ async def sync_run_query(query: str, params: tuple = ()) -> List[Dict[str, Any]]
         conn = sqlite3.connect("reunioes.db")
         try:
             cur = conn.cursor()
+            cur.execute("PRAGMA group_concat_max_len = 10000000")
             cur.execute(query, params)
             columns = [description[0] for description in cur.description]
             return [dict(zip(columns, row)) for row in cur.fetchall()]
@@ -34,6 +35,7 @@ async def sync_run_one(query: str, params: tuple = ()) -> Optional[Dict[str, Any
         conn = sqlite3.connect("reunioes.db")
         try:
             cur = conn.cursor()
+            cur.execute("PRAGMA group_concat_max_len = 10000000")
             cur.execute(query, params)
             row = cur.fetchone()
             if row is None:
@@ -82,12 +84,10 @@ async def get_reunioes(search: str = Query(""), page: int = Query(1), page_size:
     """
     params = where_params + [page_size, offset]
     data = await sync_run_query(summary_query, tuple(params))
-
     total_query = f"SELECT COUNT(DISTINCT ID_MEETING) as total FROM reunioes {where_clause}"
     total_res = await sync_run_one(total_query, tuple(where_params))
     total = total_res["total"] if total_res else 0
     total_pages = (total + page_size - 1) // page_size
-
     return {
         "data": data,
         "total": total,
@@ -100,17 +100,17 @@ async def get_reunioes(search: str = Query(""), page: int = Query(1), page_size:
 async def get_reuniao(id_meeting: str):
     summary_query = f"""
         SELECT ID_MEETING,
-        MAX(DT_MEETING) as dt_meeting,
-        MAX(FORMATO_MEETING) as formato_meeting,
-        MAX(STATUS_MEETING) as status_meeting,
-        AVG({DURACAO_MIN}) as duracao_minutos,
-        COUNT(*) as total_linhas,
-        MAX(NOME_UNIDADE) as nome_unidade,
-        MAX(UF) as uf,
-        MAX(NOME_SEGMENTO) as nome_segmento,
-        MAX(FAIXA_FATURAMENTO_CLIENTE_EC) as faixa_faturamento,
-        MAX(NOTA_NPS) as nota_nps,
-        GROUP_CONCAT(ANON_TRANSCRICAO, ' ') as transcricao_completa
+               MAX(DT_MEETING) as dt_meeting,
+               MAX(FORMATO_MEETING) as formato_meeting,
+               MAX(STATUS_MEETING) as status_meeting,
+               AVG({DURACAO_MIN}) as duracao_minutos,
+               COUNT(*) as total_linhas,
+               MAX(NOME_UNIDADE) as nome_unidade,
+               MAX(UF) as uf,
+               MAX(NOME_SEGMENTO) as nome_segmento,
+               MAX(FAIXA_FATURAMENTO_CLIENTE_EC) as faixa_faturamento,
+               MAX(NOTA_NPS) as nota_nps,
+               GROUP_CONCAT(ANON_TRANSCRICAO, ' ') as transcricao_completa
         FROM reunioes
         WHERE ID_MEETING = ?
         GROUP BY ID_MEETING
@@ -118,58 +118,31 @@ async def get_reuniao(id_meeting: str):
     summary = await sync_run_one(summary_query, (id_meeting,))
     if not summary:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
-
     all_rows_query = "SELECT * FROM reunioes WHERE ID_MEETING = ? ORDER BY DT_MEETING DESC"
     linhas = await sync_run_query(all_rows_query, (id_meeting,))
-
     return {"resumo": summary, "linhas": linhas}
 
 @app.get("/estatisticas/gerais")
 async def estatisticas_gerais():
     stats = {}
-
-    # total_reunioes
     total_reunioes_res = await sync_run_one("SELECT COUNT(DISTINCT ID_MEETING) as total_reunioes FROM reunioes")
     stats["total_reunioes"] = total_reunioes_res["total_reunioes"] if total_reunioes_res else 0
-
-    # total_transcricoes
     total_trans_res = await sync_run_one("SELECT COUNT(*) as total FROM reunioes WHERE ANON_TRANSCRICAO IS NOT NULL AND ANON_TRANSCRICAO != ''")
     stats["total_transcricoes"] = total_trans_res["total"] if total_trans_res else 0
-
-    # duracao_media_minutos
     duracao_media_res = await sync_run_one(f"SELECT AVG({DURACAO_MIN}) as duracao_media_minutos FROM reunioes")
     stats["duracao_media_minutos"] = float(duracao_media_res["duracao_media_minutos"] or 0)
-
-    # total_clientes
     clientes_res = await sync_run_one("SELECT COUNT(DISTINCT CODT) as total_clientes FROM reunioes")
     stats["total_clientes"] = clientes_res["total_clientes"] if clientes_res else 0
-
-    # reunioes_por_formato
     stats["reunioes_por_formato"] = await sync_run_query("SELECT FORMATO_MEETING, COUNT(DISTINCT ID_MEETING) as count FROM reunioes GROUP BY FORMATO_MEETING")
-
-    # reunioes_por_status
     stats["reunioes_por_status"] = await sync_run_query("SELECT STATUS_MEETING, COUNT(DISTINCT ID_MEETING) as count FROM reunioes GROUP BY STATUS_MEETING")
-
-    # reunioes_por_mes (últimos 12 meses approx)
     stats["reunioes_por_mes"] = await sync_run_query("SELECT substr(DT_MEETING,1,7) as mes, COUNT(DISTINCT ID_MEETING) as count FROM reunioes GROUP BY mes ORDER BY mes DESC LIMIT 12")
-
-    # nps_medio
     nps_res = await sync_run_one("SELECT AVG(NOTA_NPS) as nps_medio FROM reunioes")
     stats["nps_medio"] = float(nps_res["nps_medio"] or 0)
-
-    # reunioes_por_uf
     stats["reunioes_por_uf"] = await sync_run_query("SELECT UF, COUNT(DISTINCT ID_MEETING) as count FROM reunioes WHERE UF IS NOT NULL GROUP BY UF ORDER BY count DESC")
-
-    # total_unidades
     unidades_res = await sync_run_one("SELECT COUNT(DISTINCT NOME_UNIDADE) as total_unidades FROM reunioes")
     stats["total_unidades"] = unidades_res["total_unidades"] if unidades_res else 0
-
-    # segmentos_mais_comuns
     stats["segmentos_mais_comuns"] = await sync_run_query("SELECT NOME_SEGMENTO, COUNT(DISTINCT ID_MEETING) as count FROM reunioes GROUP BY NOME_SEGMENTO ORDER BY count DESC LIMIT 10")
-
-    # faixa_faturamento_count
     stats["faixa_faturamento_count"] = await sync_run_query("SELECT FAIXA_FATURAMENTO_CLIENTE_EC as faixa, COUNT(DISTINCT ID_MEETING) as count FROM reunioes GROUP BY FAIXA_FATURAMENTO_CLIENTE_EC")
-
     return stats
 
 @app.get("/estatisticas/reuniao/{id_meeting}")
@@ -190,7 +163,6 @@ async def estatisticas_reuniao(id_meeting: str):
     res = await sync_run_one(query, (id_meeting,))
     if not res:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
-    # Convert to float where appropriate
     res["duracao_total_minutos"] = float(res["duracao_total_minutos"] or 0)
     res["media_palavras"] = float(res["media_palavras"] or 0)
     res["nota_nps"] = float(res["nota_nps"] or 0)
@@ -203,23 +175,99 @@ async def analises_palavras_chave(q: str = Query(...)):
         return []
     termo_upper = q.upper()
     termo_like = f"%{termo_upper}%"
-    
     query = """
-        SELECT 
-            ID_MEETING,
-            DT_MEETING as dt_meeting,
-            NOME_UNIDADE as nome_unidade,
-            SUBSTR(
-                ANON_TRANSCRICAO,
-                MAX(1, INSTR(UPPER(ANON_TRANSCRICAO), ?) - 60),
-                150
-            ) as trecho
+        SELECT ID_MEETING, DT_MEETING as dt_meeting, NOME_UNIDADE as nome_unidade,
+               SUBSTR(ANON_TRANSCRICAO, MAX(1, INSTR(UPPER(ANON_TRANSCRICAO), ?) - 60), 150) as trecho
         FROM reunioes
         WHERE UPPER(ANON_TRANSCRICAO) LIKE ?
-        ORDER BY DT_MEETING DESC
-        LIMIT 50
+        ORDER BY DT_MEETING DESC LIMIT 50
     """
     return await sync_run_query(query, (termo_upper, termo_like))
+
+# ===== NOVO ENDPOINT: ANÁLISES COMPLETAS =====
+@app.get("/analises/completas")
+async def analises_completas(search: str = Query("")):
+    where_clause, where_params = build_where(search)
+    params = tuple(where_params)
+    stats = {}
+
+    metricas = await sync_run_one(f"""
+        SELECT COUNT(DISTINCT ID_MEETING) as total_reunioes,
+               ROUND(AVG({DURACAO_MIN}), 1) as duracao_media,
+               COUNT(DISTINCT CODT) as total_clientes,
+               COUNT(DISTINCT NOME_UNIDADE) as total_unidades,
+               ROUND(AVG(CAST(NOTA_NPS AS REAL)), 1) as nps_medio,
+               SUM(CASE WHEN ANON_TRANSCRICAO IS NOT NULL AND ANON_TRANSCRICAO != '' THEN 1 ELSE 0 END) as total_transcricoes,
+               ROUND(AVG(LENGTH(ANON_TRANSCRICAO)), 0) as media_caracteres
+        FROM reunioes {where_clause}
+    """, params)
+    stats["metricas"] = metricas or {}
+
+    stats["por_uf"] = await sync_run_query(f"""
+        SELECT UF, COUNT(DISTINCT ID_MEETING) as count
+        FROM reunioes {where_clause} AND UF IS NOT NULL AND UF != ''
+        GROUP BY UF ORDER BY count DESC
+    """, params)
+
+    stats["por_segmento"] = await sync_run_query(f"""
+        SELECT NOME_SEGMENTO, COUNT(DISTINCT ID_MEETING) as count
+        FROM reunioes {where_clause} AND NOME_SEGMENTO IS NOT NULL AND NOME_SEGMENTO != ''
+        GROUP BY NOME_SEGMENTO ORDER BY count DESC LIMIT 10
+    """, params)
+
+    stats["por_mes"] = await sync_run_query(f"""
+        SELECT substr(DT_MEETING,1,7) as mes, COUNT(DISTINCT ID_MEETING) as count
+        FROM reunioes {where_clause}
+        GROUP BY mes ORDER BY mes DESC LIMIT 12
+    """, params)
+
+    stats["por_formato"] = await sync_run_query(f"""
+        SELECT FORMATO_MEETING, COUNT(DISTINCT ID_MEETING) as count
+        FROM reunioes {where_clause} AND FORMATO_MEETING IS NOT NULL AND FORMATO_MEETING != ''
+        GROUP BY FORMATO_MEETING
+    """, params)
+
+    stats["por_status"] = await sync_run_query(f"""
+        SELECT STATUS_MEETING, COUNT(DISTINCT ID_MEETING) as count
+        FROM reunioes {where_clause} AND STATUS_MEETING IS NOT NULL AND STATUS_MEETING != ''
+        GROUP BY STATUS_MEETING
+    """, params)
+
+    stats["por_faturamento"] = await sync_run_query(f"""
+        SELECT FAIXA_FATURAMENTO_CLIENTE_EC as faixa, COUNT(DISTINCT ID_MEETING) as count
+        FROM reunioes {where_clause} AND FAIXA_FATURAMENTO_CLIENTE_EC IS NOT NULL AND FAIXA_FATURAMENTO_CLIENTE_EC != ''
+        GROUP BY faixa ORDER BY count DESC LIMIT 10
+    """, params)
+
+    stats["distribuicao_nps"] = await sync_run_query(f"""
+        SELECT CASE
+            WHEN CAST(NOTA_NPS AS REAL) >= 9 THEN 'Promotores (9-10)'
+            WHEN CAST(NOTA_NPS AS REAL) >= 7 THEN 'Neutros (7-8)'
+            WHEN NOTA_NPS IS NOT NULL AND NOTA_NPS != '' THEN 'Detratores (0-6)'
+            ELSE 'Sem NPS'
+        END as categoria, COUNT(DISTINCT ID_MEETING) as count
+        FROM reunioes {where_clause}
+        GROUP BY categoria
+        ORDER BY CASE categoria
+            WHEN 'Promotores (9-10)' THEN 1
+            WHEN 'Neutros (7-8)' THEN 2
+            WHEN 'Detratores (0-6)' THEN 3 ELSE 4
+        END
+    """, params)
+
+    stats["top_unidades"] = await sync_run_query(f"""
+        SELECT NOME_UNIDADE, COUNT(DISTINCT ID_MEETING) as count
+        FROM reunioes {where_clause} AND NOME_UNIDADE IS NOT NULL AND NOME_UNIDADE != ''
+        GROUP BY NOME_UNIDADE ORDER BY count DESC LIMIT 10
+    """, params)
+
+    stats["duracao_por_segmento"] = await sync_run_query(f"""
+        SELECT NOME_SEGMENTO, ROUND(AVG({DURACAO_MIN}), 1) as duracao_media, COUNT(DISTINCT ID_MEETING) as qtd
+        FROM reunioes {where_clause} AND NOME_SEGMENTO IS NOT NULL AND NOME_SEGMENTO != ''
+        GROUP BY NOME_SEGMENTO HAVING qtd >= 3 ORDER BY duracao_media DESC LIMIT 10
+    """, params)
+
+    return stats
 
 if __name__ == "__main__":
     import uvicorn
