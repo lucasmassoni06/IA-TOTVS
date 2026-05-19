@@ -44,138 +44,150 @@ const Layout = ({
   ];
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen bg-gray-50">
-      <aside className="w-full lg:w-80 bg-[#0f1419] text-white flex flex-col lg:h-screen">
-        {/* Logo */}
-        <div className="sidebar-logo p-6 border-b border-gray-800">
-          <h1 className="text-2xl font-bold text-[#005CA9] tracking-tight">
-            TOTVS Transcrições
-          </h1>
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      {/* ===== HEADER ===== */}
+      <header className="header-main">
+        <div className="header-container">
+          <div className="header-brand">
+            <div className="header-logo">
+              <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+                <rect width="34" height="34" rx="9" fill="#005CA9"/>
+                <text x="17" y="23" textAnchor="middle" fill="white" fontSize="19" fontWeight="bold" fontFamily="Inter, sans-serif">T</text>
+              </svg>
+            </div>
+            <div className="header-title">
+              <span className="header-name">TOTVS</span>
+              <span className="header-subtitle">Transcrições</span>
+            </div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn header-btn-outline">Entrar</button>
+            <button className="header-btn header-btn-primary">Criar Conta</button>
+          </div>
         </div>
+      </header>
 
-        {/* Navigation */}
-        <nav className="px-4 py-6 space-y-2 flex-shrink-0">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              className={`nav-item w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                activePage === item.id
-                  ? 'active bg-[#005CA9] text-white shadow-lg'
-                  : 'hover:bg-[#1a1f2e] text-gray-200'
-              }`}
-              onClick={() => onNavigate(item.id)}
-            >
-              <span className="text-lg flex-shrink-0">{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* Filter Section */}
-        <div className="border-t border-gray-700 px-4 py-6 flex-1 flex flex-col min-h-0">
-          <div
-            className="flex items-center justify-between mb-4 cursor-pointer select-none flex-shrink-0"
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-          >
-            <span className="text-lg font-semibold flex items-center gap-2">
-              📋 Reuniões
-            </span>
-            <span className="sidebar-badge bg-[#FEAC0E] text-black px-2 py-1 rounded-full text-xs font-medium">
-              {meetings?.length ?? 0}
-            </span>
+      {/* ===== BODY ===== */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* SIDEBAR */}
+        <aside className="sidebar-main">
+          {/* User */}
+          <div className="sidebar-user">
+            <div className="sidebar-user-avatar">
+              {(userName || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-name">Olá, {userName}</div>
+              <div className="sidebar-user-email">{userEmail}</div>
+            </div>
           </div>
 
-          {isFilterOpen && (
-            <div className="flex flex-col flex-1 min-h-0">
-              {/* Search Input */}
-              <div className="relative mb-4 flex-shrink-0">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg pointer-events-none">
-                  🔍
-                </span>
-                <input
-                  className="sidebar-search-input w-full pl-10 pr-10 py-2.5 bg-[#1a1f2e] border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-[#005CA9] focus:border-2 transition-colors"
-                  placeholder="Buscar reuniões..."
-                  value={searchValue}
-                  onChange={handleSearch}
-                />
-                {searchValue && (
-                  <button
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 transition-colors"
-                    onClick={handleClear}
-                    type="button"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
+          {/* Navigation */}
+          <div className="sidebar-section">
+            <div className="sidebar-section-label">Menu</div>
+            <nav className="sidebar-nav">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  className={`sidebar-nav-item ${activePage === item.id ? 'active' : ''}`}
+                  onClick={() => onNavigate(item.id)}
+                >
+                  <span className="sidebar-nav-icon">{item.icon}</span>
+                  <span className="sidebar-nav-label">{item.label}</span>
+                  {activePage === item.id && <span className="sidebar-nav-indicator" />}
+                </button>
+              ))}
+            </nav>
+          </div>
 
-              {/* Meetings List */}
-              <div className="sidebar-scroll flex-1 overflow-y-auto space-y-2 pr-1 -mr-1">
-                {meetings?.length > 0 ? (
-                  meetings.map((meeting) => {
-                    const mid = meeting.id_meeting;
-                    const title = meeting.nome_unidade || `Reunião ${mid}`;
-                    const dateFormatted = meeting.dt_meeting
-                      ? new Date(meeting.dt_meeting).toLocaleDateString('pt-BR')
-                      : '—';
-                    const dur = meeting.duracao_minutos ? meeting.duracao_minutos.toFixed(0) : '?';
-                    const isSelected = selectedMeetingId && selectedMeetingId === mid;
-                    const statusEmoji = getStatusEmoji(meeting.status_meeting);
-
-                    return (
-                      <div
-                        key={mid}
-                        className={`sidebar-meeting-card p-3 rounded-xl cursor-pointer transition-all border-2 hover:bg-[#1a1f2e] hover:border-gray-500 ${
-                          isSelected
-                            ? 'selected border-[#005CA9] bg-[#005CA9]/20'
-                            : 'border-transparent'
-                        }`}
-                        onClick={() => onSelectMeeting(mid)}
-                      >
-                        <div className="meeting-title font-medium text-sm truncate pr-2">
-                          {title}
-                        </div>
-                        <div className="meeting-meta flex items-center gap-2 mt-1 text-xs text-gray-400">
-                          <span>{dateFormatted}</span>
-                          <span>•</span>
-                          <span>{dur} min</span>
-                          <span className="ml-auto text-base flex-shrink-0">{statusEmoji}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
-                          <span>{meeting.formato_meeting || '—'}</span>
-                          <span>•</span>
-                          <span>{meeting.uf || '—'}</span>
-                          {meeting.nota_nps && (
-                            <>
-                              <span>•</span>
-                              <span>NPS {meeting.nota_nps.toFixed(1)}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-gray-500 text-center py-12 text-sm">
-                    Nenhuma reunião encontrada
-                  </div>
-                )}
+          {/* Meetings */}
+          <div className="sidebar-section sidebar-section-meetings">
+            <div className="sidebar-section-header" onClick={() => setIsFilterOpen(!isFilterOpen)}>
+              <div className="sidebar-section-label">Reuniões</div>
+              <div className="sidebar-section-actions">
+                <span className="sidebar-badge">{meetings?.length ?? 0}</span>
+                <button className={`sidebar-collapse-btn ${isFilterOpen ? 'open' : ''}`} type="button">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* User Info */}
-        <div className="border-t border-gray-700 p-4 flex-shrink-0">
-          <div className="font-medium text-sm truncate">Olá, {userName}</div>
-          <div className="text-xs text-gray-400 truncate mt-0.5">{userEmail}</div>
-        </div>
-      </aside>
+            {isFilterOpen && (
+              <div className="sidebar-meetings-container">
+                <div className="sidebar-search-wrapper">
+                  <svg className="sidebar-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                  </svg>
+                  <input
+                    className="sidebar-search-input"
+                    placeholder="Buscar reuniões..."
+                    value={searchValue}
+                    onChange={handleSearch}
+                  />
+                  {searchValue && (
+                    <button className="sidebar-search-clear" onClick={handleClear} type="button">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
 
-      {/* Main Content */}
-      <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-        {children}
-      </main>
+                <div className="sidebar-scroll sidebar-meetings-list">
+                  {meetings?.length > 0 ? (
+                    meetings.map((meeting) => {
+                      const mid = meeting.id_meeting;
+                      const title = meeting.nome_unidade || `Reunião ${mid}`;
+                      const dateFormatted = meeting.dt_meeting
+                        ? new Date(meeting.dt_meeting).toLocaleDateString('pt-BR')
+                        : '—';
+                      const dur = meeting.duracao_minutos ? meeting.duracao_minutos.toFixed(0) : '?';
+                      const isSelected = selectedMeetingId && selectedMeetingId === mid;
+                      const statusEmoji = getStatusEmoji(meeting.status_meeting);
+
+                      return (
+                        <div
+                          key={mid}
+                          className={`sidebar-meeting-card ${isSelected ? 'selected' : ''}`}
+                          onClick={() => onSelectMeeting(mid)}
+                        >
+                          <div className="sidebar-meeting-top">
+                            <span className="sidebar-meeting-title">{title}</span>
+                            <span className="sidebar-meeting-status">{statusEmoji}</span>
+                          </div>
+                          <div className="sidebar-meeting-meta">
+                            <span>{dateFormatted}</span>
+                            <span className="meta-dot">•</span>
+                            <span>{dur} min</span>
+                            <span className="meta-dot">•</span>
+                            <span>{meeting.formato_meeting || '—'}</span>
+                          </div>
+                          <div className="sidebar-meeting-tags">
+                            {meeting.uf && <span className="sidebar-tag">{meeting.uf}</span>}
+                            {meeting.nota_nps && <span className="sidebar-tag sidebar-tag-nps">NPS {meeting.nota_nps.toFixed(1)}</span>}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="sidebar-empty">
+                      <span className="sidebar-empty-icon">📭</span>
+                      <span className="sidebar-empty-text">Nenhuma reunião encontrada</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* MAIN CONTENT */}
+        <main className="content-main">
+          {children}
+        </main>
+      </div>
     </div>
   );
 };
