@@ -60,20 +60,14 @@ const Layout = ({
               <span className="header-subtitle">Transcrições</span>
             </div>
           </div>
-
           <nav className="header-nav">
             {navItems.map((item) => (
-              <button
-                key={item.id}
-                className={`header-nav-item ${activePage === item.id ? 'active' : ''}`}
-                onClick={() => onNavigate(item.id)}
-              >
+              <button key={item.id} className={`header-nav-item ${activePage === item.id ? 'active' : ''}`} onClick={() => onNavigate(item.id)}>
                 <span className="header-nav-icon" dangerouslySetInnerHTML={{ __html: item.icon }} />
                 <span>{item.label}</span>
               </button>
             ))}
           </nav>
-
           <div className="header-actions">
             <div className={`header-status ${isOnline ? 'online' : 'offline'}`}>
               <span className="header-status-dot" />
@@ -88,73 +82,54 @@ const Layout = ({
       <div className="flex flex-1 overflow-hidden">
         <aside className="sidebar-main">
           <div className="sidebar-user">
-            <div className="sidebar-user-avatar">
-              {(userName || 'U').charAt(0).toUpperCase()}
-            </div>
+            <div className="sidebar-user-avatar">{(userName || 'U').charAt(0).toUpperCase()}</div>
             <div className="sidebar-user-info">
               <div className="sidebar-user-name">Olá, {userName}</div>
               <div className="sidebar-user-email">{userEmail}</div>
             </div>
           </div>
-
           <div className="sidebar-section sidebar-section-meetings">
             <div className="sidebar-section-header" onClick={() => setIsFilterOpen(!isFilterOpen)}>
               <div className="sidebar-section-label">Reuniões</div>
               <div className="sidebar-section-actions">
                 <span className="sidebar-badge">{meetings?.length ?? 0}</span>
                 <button className={`sidebar-collapse-btn ${isFilterOpen ? 'open' : ''}`} type="button">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               </div>
             </div>
-
             {isFilterOpen && (
               <div className="sidebar-meetings-container">
                 <div className="sidebar-search-wrapper">
-                  <svg className="sidebar-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                  </svg>
+                  <svg className="sidebar-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                   <input className="sidebar-search-input" placeholder="Buscar reuniões..." value={searchValue} onChange={handleSearch} />
-                  {searchValue && (
-                    <button className="sidebar-search-clear" onClick={handleClear} type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-                      </svg>
-                    </button>
-                  )}
+                  {searchValue && <button className="sidebar-search-clear" onClick={handleClear} type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>}
                 </div>
-
                 <div className="sidebar-scroll sidebar-meetings-list">
-                  {meetings?.length > 0 ? (
-                    meetings.map((meeting) => {
-                      const mid = meeting.id_meeting;
-                      const title = meeting.nome_unidade || `Reunião ${mid}`;
-                      const dateFormatted = meeting.dt_meeting ? new Date(meeting.dt_meeting).toLocaleDateString('pt-BR') : '—';
-                      const dur = meeting.duracao_minutos ? meeting.duracao_minutos.toFixed(0) : '?';
-                      const isSelected = selectedMeetingId && selectedMeetingId === mid;
-                      const statusEmoji = getStatusEmoji(meeting.status_meeting);
-
-                      return (
-                        <div key={mid} className={`sidebar-meeting-card ${isSelected ? 'selected' : ''}`} onClick={() => onSelectMeeting(mid)}>
-                          <div className="sidebar-meeting-top">
-                            <span className="sidebar-meeting-title">{title}</span>
-                            <span className="sidebar-meeting-status">{statusEmoji}</span>
-                          </div>
-                          <div className="sidebar-meeting-meta">
-                            <span>{dateFormatted}</span><span className="meta-dot">•</span><span>{dur} min</span><span className="meta-dot">•</span><span>{meeting.formato_meeting || '—'}</span>
-                          </div>
-                          <div className="sidebar-meeting-tags">
-                            {meeting.uf && <span className="sidebar-tag">{meeting.uf}</span>}
-                            {meeting.nota_nps && <span className="sidebar-tag sidebar-tag-nps">NPS {meeting.nota_nps.toFixed(1)}</span>}
-                          </div>
+                  {meetings?.length > 0 ? meetings.map((meeting) => {
+                    const mid = meeting.id_meeting;
+                    const title = meeting.nome_unidade || `Reunião ${mid}`;
+                    const dateFormatted = meeting.dt_meeting ? new Date(meeting.dt_meeting).toLocaleDateString('pt-BR') : '—';
+                    const dur = meeting.duracao_minutos ? meeting.duracao_minutos.toFixed(0) : '?';
+                    const isSelected = selectedMeetingId && selectedMeetingId === mid;
+                    return (
+                      <div key={mid} className={`sidebar-meeting-card ${isSelected ? 'selected' : ''}`} onClick={() => onSelectMeeting(mid)}>
+                        <div className="sidebar-meeting-top">
+                          <span className="sidebar-meeting-title">{title}</span>
+                          <span className="sidebar-meeting-status">{getStatusEmoji(meeting.status_meeting)}</span>
                         </div>
-                      );
-                    })
-                  ) : (
+                        <div className="sidebar-meeting-meta">
+                          <span>{dateFormatted}</span><span className="meta-dot">•</span><span>{dur} min</span><span className="meta-dot">•</span><span>{meeting.formato_meeting || '—'}</span>
+                        </div>
+                        <div className="sidebar-meeting-tags">
+                          {meeting.uf && <span className="sidebar-tag">{meeting.uf}</span>}
+                          {meeting.nota_nps && <span className="sidebar-tag sidebar-tag-nps">NPS {meeting.nota_nps.toFixed(1)}</span>}
+                        </div>
+                      </div>
+                    );
+                  }) : (
                     <div className="sidebar-empty">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21h16"/><path d="M4 3v18"/><path d="M4 3h12l4 4v14"/></svg>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5"><path d="M4 21h16"/><path d="M4 3v18"/><path d="M4 3h12l4 4v14"/></svg>
                       <span className="sidebar-empty-text">Nenhuma reunião encontrada</span>
                     </div>
                   )}
@@ -163,13 +138,9 @@ const Layout = ({
             )}
           </div>
         </aside>
-
         <main className="content-main">{children}</main>
       </div>
-
-      <footer className="app-footer">
-        © 2026 TOTVS Transcrições · Construído com foco em desenvolvimento
-      </footer>
+      <footer className="app-footer">© 2026 TOTVS Transcrições · Construído com foco em desenvolvimento</footer>
     </div>
   );
 };
