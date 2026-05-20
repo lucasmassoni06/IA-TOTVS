@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
 import asyncio
+import re
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import httpx
@@ -14,14 +15,13 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 DURACAO_MIN = "CASE WHEN DURACAO_MEETING IS NULL OR DURACAO_MEETING = '' THEN 0.0 ELSE CAST(strftime('%s', '1970-01-01 ' || DURACAO_MEETING) AS REAL) / 60.0 END"
-WORDS_COUNT = "LENGTH(ANON_TRANSCRICAO) - LENGTH(REPLACE(ANON_TRANSCRICAO, ' ', '')) + 1"
 
 async def sync_run_query(query: str, params: tuple = ()) -> List[Dict[str, Any]]:
     def _execute():
@@ -214,78 +214,170 @@ async def analises_completas(search: str = Query("")):
     stats["duracao_por_segmento"] = await sync_run_query(f"SELECT NOME_SEGMENTO, ROUND(AVG({DURACAO_MIN}), 1) as duracao_media, COUNT(DISTINCT ID_MEETING) as qtd FROM reunioes {where_clause} AND NOME_SEGMENTO IS NOT NULL AND NOME_SEGMENTO != '' GROUP BY NOME_SEGMENTO HAVING qtd >= 3 ORDER BY duracao_media DESC LIMIT 10", params)
     return stats
 
-# ===== IA DE VERDADE =====
-
 class AssistenteRequest(BaseModel):
     question: str
 
+class FimChatRequest(BaseModel):
+    meeting_id: str
+
+class PalavrasChaveRequest(BaseModel):
+    meeting_id: str
+
 @app.post("/assistente/ask")
 async def assistente_ask(req: AssistenteRequest):
-    where_clause, where_params = build_where("")
-    params = tuple(where_params)
+    q = req.question.lower().strip()
+    print(f"\n===== PERGUNTA: {req.question} =====")
 
-    stats = {}
-    total_res = await sync_run_one(f"SELECT COUNT(DISTINCT ID_MEETING) as total FROM reunioes {where_clause}", params)
-    stats["total_reunioes"] = total_res["total"] if total_res else 0
-    nps_res = await sync_run_one(f"SELECT AVG(CAST(NOTA_NPS AS REAL)) as nps FROM reunioes {where_clause}", params)
-    stats["nps_medio"] = round(float(nps_res["nps"] or 0), 1) if nps_res else "—"
-    duracao_res = await sync_run_one(f"SELECT AVG({DURACAO_MIN}) as duracao FROM reunioes {where_clause}", params)
-    stats["duracao_media"] = round(float(duracao_res["duracao"] or 0), 1) if duracao_res else "—"
-    clientes_res = await sync_run_one(f"SELECT COUNT(DISTINCT CODT) as total FROM reunioes {where_clause}", params)
-    stats["total_clientes"] = clientes_res["total"] if clientes_res else 0
-    unidades_res = await sync_run_one(f"SELECT COUNT(DISTINCT NOME_UNIDADE) as total FROM reunioes {where_clause}", params)
-    stats["total_unidades"] = unidades_res["total"] if unidades_res else 0
-    transc_res = await sync_run_one(f"SELECT COUNT(*) as total FROM reunioes WHERE ANON_TRANSCRICAO IS NOT NULL AND ANON_TRANSCRICAO != '' {'AND ' + where_clause.replace('WHERE 1=1 AND ', '').replace('WHERE 1=1', '') if where_clause != 'WHERE 1=1' else ''}", params if where_clause != 'WHERE 1=1' else ())
-    stats["total_transcricoes"] = transc_res["total"] if transc_res else 0
-    top_ufs = await sync_run_query(f"SELECT UF, COUNT(DISTINCT ID_MEETING) as count FROM reunioes {where_clause} AND UF IS NOT NULL AND UF != '' GROUP BY UF ORDER BY count DESC LIMIT 5", params)
-    top_segs = await sync_run_query(f"SELECT NOME_SEGMENTO, COUNT(DISTINCT ID_MEETING) as count FROM reunioes {where_clause} AND NOME_SEGMENTO IS NOT NULL AND NOME_SEGMENTO != '' GROUP BY NOME_SEGMENTO ORDER BY count DESC LIMIT 5", params)
+    # ===== 1. CONSULTA TODOS OS DADOS SEM FILTRO =====
     
-    uf_list = [f"{u['UF']}: {u['count']}" for u in top_ufs]
-    seg_list = [f"{s['NOME_SEGMENTO']}: {s['count']}" for s in top_segs]
+    # Total de reuniões por estado (TODOS)
+    reunioes_por_estado = await sync_run_query("""
+        SELECT UF, COUNT(DISTINCT ID_MEETING) as total
+        FROM reunioes
+        WHERE UF IS NOT NULL AND UF != ''
+        GROUP BY UF
+        ORDER BY total DESC
+    """, ())
+    
+    # Total de reuniões por segmento (TODOS)
+    reunioes_por_segmento = await sync_run_query("""
+        SELECT NOME_SEGMENTO, COUNT(DISTINCT ID_MEETING) as total
+        FROM reunioes
+        WHERE NOME_SEGMENTO IS NOT NULL AND NOME_SEGMENTO != ''
+        GROUP BY NOME_SEGMENTO
+        ORDER BY total DESC
+    """, ())
+    
+    # Top 5 reuniões mais longas (sem filtro de estado)
+    mais_longas = await sync_run_query(f"""
+        SELECT ID_MEETING, MAX(DT_MEETING) as dt, NOME_UNIDADE, UF,
+               ROUND({DURACAO_MIN}, 1) as dur
+        FROM reunioes WHERE {DURACAO_MIN} > 0
+        GROUP BY ID_MEETING ORDER BY dur DESC LIMIT 5
+    """, ())
 
-    contexto = f"""Você é um assistente de IA especializado em analisar dados de reuniões da TOTVS.
-Responda APENAS com base nos dados fornecidos. Seja direto, informativo e use emojis com moderação.
+    # Estatísticas gerais
+    total_reunioes = (await sync_run_one("SELECT COUNT(DISTINCT ID_MEETING) as total FROM reunioes", ()))["total"]
+    nps_medio = round(float((await sync_run_one("SELECT AVG(CAST(NOTA_NPS AS REAL)) as n FROM reunioes", ()))["n"] or 0), 1)
+    dur_media = round(float((await sync_run_one(f"SELECT AVG({DURACAO_MIN}) as d FROM reunioes", ()))["d"] or 0), 1)
 
-DADOS ATUAIS:
-- Total de reuniões: {stats['total_reunioes']}
-- NPS médio: {stats['nps_medio']}/10
-- Duração média: {stats['duracao_media']} minutos
-- Total de clientes: {stats['total_clientes']}
-- Total de unidades: {stats['total_unidades']}
-- Total de transcrições: {stats['total_transcricoes']}
-- Top estados: {', '.join(uf_list) if uf_list else 'N/A'}
-- Top segmentos: {', '.join(seg_list) if seg_list else 'N/A'}
+    # ===== 2. DETECTA INTENÇÃO =====
+    uf_map = {
+        "são paulo": "SP", "sp": "SP", "sao paulo": "SP",
+        "rio de janeiro": "RJ", "rj": "RJ",
+        "minas gerais": "MG", "mg": "MG",
+        "bahia": "BA", "ba": "BA",
+        "paraná": "PR", "pr": "PR", "parana": "PR",
+        "rio grande do sul": "RS", "rs": "RS",
+        "santa catarina": "SC", "sc": "SC",
+        "pernambuco": "PE", "pe": "PE",
+        "ceará": "CE", "ce": "CE", "ceara": "CE",
+        "distrito federal": "DF", "df": "DF", "brasília": "DF", "brasilia": "DF",
+        "goiás": "GO", "go": "GO", "goias": "GO",
+        "amazonas": "AM", "am": "AM",
+        "pará": "PA", "pa": "PA", "para": "PA",
+        "espírito santo": "ES", "es": "ES", "espirito santo": "ES",
+    }
 
-PERGUNTA: {req.question}"""
+    uf_encontrada = None
+    for nome, sigla in uf_map.items():
+        if nome in q:
+            uf_encontrada = sigla
+            break
 
+    # ===== 3. MONTA CONTEXTO COMPLETO =====
+    # Estados formatados
+    estados_str = "\n".join([f"  • {e['UF']}: {e['total']} reuniões" for e in reunioes_por_estado])
+    
+    # Segmentos formatados
+    segmentos_str = "\n".join([f"  • {s['NOME_SEGMENTO']}: {s['total']} reuniões" for s in reunioes_por_segmento[:10]])
+    
+    # Reuniões mais longas
+    longas_str = "\n".join([f"  • {r['ID_MEETING']} | {r['NOME_UNIDADE']} ({r['UF']}) | {r['dur']} min" for r in mais_longas])
+
+    dados_completos = f"""DADOS GLOBAIS (TODOS OS ESTADOS):
+• Total de reuniões: {total_reunioes}
+• NPS médio: {nps_medio}/10  
+• Duração média: {dur_media} min
+
+REUNIÕES POR ESTADO:
+{estados_str}
+
+PRINCIPAIS SEGMENTOS:
+{segmentos_str}
+
+REUNIÕES MAIS LONGAS:
+{longas_str if longas_str else "Nenhuma"}
+
+INSTRUÇÃO: Responda APENAS com base nos dados acima. Os dados de TODOS os estados estão disponíveis."""
+
+    # ===== SE PEDIU ESTADO ESPECÍFICO, ADICIONA FILTRO =====
+    if uf_encontrada:
+        total_uf = (await sync_run_one("SELECT COUNT(DISTINCT ID_MEETING) as t FROM reunioes WHERE UF = ?", (uf_encontrada,)))["t"]
+        nps_uf = await sync_run_one("SELECT AVG(CAST(NOTA_NPS AS REAL)) as n FROM reunioes WHERE UF = ?", (uf_encontrada,))
+        nps_uf_val = round(float(nps_uf["n"] or 0), 1) if nps_uf and nps_uf["n"] else 0
+        nome_estado = [k for k, v in uf_map.items() if v == uf_encontrada][0].title()
+        
+        # Reuniões mais longas desse estado
+        longas_uf = await sync_run_query(f"""
+            SELECT ID_MEETING, MAX(DT_MEETING) as dt, NOME_UNIDADE,
+                   ROUND({DURACAO_MIN}, 1) as dur
+            FROM reunioes WHERE {DURACAO_MIN} > 0 AND UF = ?
+            GROUP BY ID_MEETING ORDER BY dur DESC LIMIT 3
+        """, (uf_encontrada,))
+
+        dados_completos += f"""
+
+DADOS ESPECÍFICOS DE {nome_estado.upper()} ({uf_encontrada}):
+• Total: {total_uf} reuniões
+• NPS: {nps_uf_val}/10
+• Representa {round(total_uf/total_reunioes*100, 1)}% do total"""
+
+        if longas_uf:
+            dados_completos += "\n• Reuniões mais longas em " + nome_estado + ":"
+            for r in longas_uf:
+                dados_completos += f"\n  - {r['ID_MEETING']} | {r['NOME_UNIDADE']} | {r['dur']} min"
+
+    # ===== 4. CHAMA A IA =====
     api_key = os.getenv("AI_API_KEY", "")
-    api_url = os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions")
-    model = os.getenv("AI_MODEL", "gpt-4o-mini")
+    api_url = os.getenv("AI_API_URL", "")
 
-    if not api_key:
-        return {"answer": "⚠️ IA não configurada. Para ativar, crie um arquivo `.env` com `AI_API_KEY=sua_chave`. Enquanto isso, pergunte sobre reuniões, NPS, estados ou segmentos.", "needs_api_key": True}
+    if api_key and api_url:
+        model = os.getenv("AI_MODEL", "llama3.2:3b")
+        
+        prompt = f"""{dados_completos}
 
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                api_url,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={
+PERGUNTA: {req.question}
+
+REGRAS:
+1. Responda apenas com os dados fornecidos acima
+2. NÃO diga que não tem dados — todos os dados estão aqui
+3. Seja direto e específico, cite números e nomes"""
+
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                payload = {
                     "model": model,
-                    "messages": [
-                        {"role": "system", "content": "Você é um analista de dados especializado em reuniões corporativas. Responda em português brasileiro, de forma clara e objetiva. Use no máximo 3 parágrafos."},
-                        {"role": "user", "content": contexto}
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 500
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2,
+                    "max_tokens": 500,
+                    "stream": False
                 }
-            )
-            data = resp.json()
-            answer = data["choices"][0]["message"]["content"]
-            return {"answer": answer}
-    except Exception:
-        return {"answer": "❌ Erro ao conectar com a IA. Verifique sua chave de API e tente novamente.", "error": True}
+                resp = await client.post(api_url, json=payload, headers={"Content-Type": "application/json"})
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if "choices" in data:
+                        return {"answer": data["choices"][0]["message"]["content"]}
+                    elif "response" in data:
+                        return {"answer": data["response"]}
+        except Exception as e:
+            print(f"ERRO: {e}")
+
+    # Fallback direto sem IA
+    return {"answer": f"📊 Dados de **todos os estados:**\n{estados_str}\n\nTotal geral: {total_reunioes} reuniões | NPS: {nps_medio}/10"}
 
 if __name__ == "__main__":
     import uvicorn
+    print("🚀 Servidor TOTVS Transcrições rodando!")
     uvicorn.run(app, host="0.0.0.0", port=8000)
