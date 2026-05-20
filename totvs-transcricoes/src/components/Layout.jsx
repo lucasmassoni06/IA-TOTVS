@@ -9,7 +9,8 @@ const Layout = ({
   meetings,
   selectedMeetingId,
   onSelectMeeting,
-  onSearchMeetings
+  onSearchMeetings,
+  isOnline
 }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [searchValue, setSearchValue] = useState('');
@@ -36,23 +37,22 @@ const Layout = ({
   };
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'reunioes', label: 'Reuniões', icon: '👥' },
-    { id: 'transcricoes', label: 'Transcrições', icon: '📝' },
-    { id: 'analises', label: 'Análises', icon: '📈' },
-    { id: 'configuracoes', label: 'Configurações', icon: '⚙️' }
+    { id: 'dashboard', label: 'Dashboard', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>' },
+    { id: 'analises', label: 'Análises', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 16v-3"/><path d="M12 16v-7"/><path d="M17 16V8"/></svg>' },
+    { id: 'reunioes', label: 'Reuniões', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+    { id: 'assistente', label: 'Assistente IA', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect x="2" y="2" width="20" height="15" rx="2" ry="2"/><path d="M16 11h2a2 2 0 0 1 2 2v1"/><path d="M14 20h.01"/><path d="M12 16h.01"/><path d="M10 20h.01"/></svg>' },
+    { id: 'transcricoes', label: 'Transcrições', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>' }
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* ===== HEADER ===== */}
+    <div className="min-h-screen flex flex-col" style={{ background: '#F4F7FE' }}>
       <header className="header-main">
         <div className="header-container">
           <div className="header-brand">
             <div className="header-logo">
-              <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-                <rect width="34" height="34" rx="9" fill="#005CA9"/>
-                <text x="17" y="23" textAnchor="middle" fill="white" fontSize="19" fontWeight="bold" fontFamily="Inter, sans-serif">T</text>
+              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                <rect width="36" height="36" rx="10" fill="#6C47FF"/>
+                <text x="18" y="24" textAnchor="middle" fill="white" fontSize="20" fontWeight="bold" fontFamily="Inter, sans-serif">T</text>
               </svg>
             </div>
             <div className="header-title">
@@ -60,18 +60,33 @@ const Layout = ({
               <span className="header-subtitle">Transcrições</span>
             </div>
           </div>
+
+          <nav className="header-nav">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                className={`header-nav-item ${activePage === item.id ? 'active' : ''}`}
+                onClick={() => onNavigate(item.id)}
+              >
+                <span className="header-nav-icon" dangerouslySetInnerHTML={{ __html: item.icon }} />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+
           <div className="header-actions">
+            <div className={`header-status ${isOnline ? 'online' : 'offline'}`}>
+              <span className="header-status-dot" />
+              {isOnline ? 'Online' : 'Offline'}
+            </div>
             <button className="header-btn header-btn-outline">Entrar</button>
             <button className="header-btn header-btn-primary">Criar Conta</button>
           </div>
         </div>
       </header>
 
-      {/* ===== BODY ===== */}
       <div className="flex flex-1 overflow-hidden">
-        {/* SIDEBAR */}
         <aside className="sidebar-main">
-          {/* User */}
           <div className="sidebar-user">
             <div className="sidebar-user-avatar">
               {(userName || 'U').charAt(0).toUpperCase()}
@@ -82,25 +97,6 @@ const Layout = ({
             </div>
           </div>
 
-          {/* Navigation */}
-          <div className="sidebar-section">
-            <div className="sidebar-section-label">Menu</div>
-            <nav className="sidebar-nav">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  className={`sidebar-nav-item ${activePage === item.id ? 'active' : ''}`}
-                  onClick={() => onNavigate(item.id)}
-                >
-                  <span className="sidebar-nav-icon">{item.icon}</span>
-                  <span className="sidebar-nav-label">{item.label}</span>
-                  {activePage === item.id && <span className="sidebar-nav-indicator" />}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          {/* Meetings */}
           <div className="sidebar-section sidebar-section-meetings">
             <div className="sidebar-section-header" onClick={() => setIsFilterOpen(!isFilterOpen)}>
               <div className="sidebar-section-label">Reuniões</div>
@@ -120,12 +116,7 @@ const Layout = ({
                   <svg className="sidebar-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
                   </svg>
-                  <input
-                    className="sidebar-search-input"
-                    placeholder="Buscar reuniões..."
-                    value={searchValue}
-                    onChange={handleSearch}
-                  />
+                  <input className="sidebar-search-input" placeholder="Buscar reuniões..." value={searchValue} onChange={handleSearch} />
                   {searchValue && (
                     <button className="sidebar-search-clear" onClick={handleClear} type="button">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -140,29 +131,19 @@ const Layout = ({
                     meetings.map((meeting) => {
                       const mid = meeting.id_meeting;
                       const title = meeting.nome_unidade || `Reunião ${mid}`;
-                      const dateFormatted = meeting.dt_meeting
-                        ? new Date(meeting.dt_meeting).toLocaleDateString('pt-BR')
-                        : '—';
+                      const dateFormatted = meeting.dt_meeting ? new Date(meeting.dt_meeting).toLocaleDateString('pt-BR') : '—';
                       const dur = meeting.duracao_minutos ? meeting.duracao_minutos.toFixed(0) : '?';
                       const isSelected = selectedMeetingId && selectedMeetingId === mid;
                       const statusEmoji = getStatusEmoji(meeting.status_meeting);
 
                       return (
-                        <div
-                          key={mid}
-                          className={`sidebar-meeting-card ${isSelected ? 'selected' : ''}`}
-                          onClick={() => onSelectMeeting(mid)}
-                        >
+                        <div key={mid} className={`sidebar-meeting-card ${isSelected ? 'selected' : ''}`} onClick={() => onSelectMeeting(mid)}>
                           <div className="sidebar-meeting-top">
                             <span className="sidebar-meeting-title">{title}</span>
                             <span className="sidebar-meeting-status">{statusEmoji}</span>
                           </div>
                           <div className="sidebar-meeting-meta">
-                            <span>{dateFormatted}</span>
-                            <span className="meta-dot">•</span>
-                            <span>{dur} min</span>
-                            <span className="meta-dot">•</span>
-                            <span>{meeting.formato_meeting || '—'}</span>
+                            <span>{dateFormatted}</span><span className="meta-dot">•</span><span>{dur} min</span><span className="meta-dot">•</span><span>{meeting.formato_meeting || '—'}</span>
                           </div>
                           <div className="sidebar-meeting-tags">
                             {meeting.uf && <span className="sidebar-tag">{meeting.uf}</span>}
@@ -173,7 +154,7 @@ const Layout = ({
                     })
                   ) : (
                     <div className="sidebar-empty">
-                      <span className="sidebar-empty-icon">📭</span>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21h16"/><path d="M4 3v18"/><path d="M4 3h12l4 4v14"/></svg>
                       <span className="sidebar-empty-text">Nenhuma reunião encontrada</span>
                     </div>
                   )}
@@ -183,11 +164,12 @@ const Layout = ({
           </div>
         </aside>
 
-        {/* MAIN CONTENT */}
-        <main className="content-main">
-          {children}
-        </main>
+        <main className="content-main">{children}</main>
       </div>
+
+      <footer className="app-footer">
+        © 2026 TOTVS Transcrições · Construído com foco em desenvolvimento
+      </footer>
     </div>
   );
 };
