@@ -510,7 +510,7 @@ REGRAS:
 3. Seja direto e específico, cite números e nomes"""
 
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=90) as client:
                 payload = {
                     "model": model,
                     "messages": [{"role": "user", "content": prompt}],
@@ -527,7 +527,13 @@ REGRAS:
                 if resp.status_code == 200:
                     data = resp.json()
                     if "choices" in data:
-                        return {"answer": data["choices"][0]["message"]["content"]}
+                        msg = data["choices"][0].get("message", {})
+                        conteudo = msg.get("content") or msg.get("reasoning_content")
+                        if isinstance(conteudo, list):
+                            partes = [p.get("text", "") for p in conteudo if isinstance(p, dict)]
+                            conteudo = " ".join(partes).strip()
+                        if isinstance(conteudo, str) and conteudo.strip():
+                            return {"answer": conteudo.strip()}
                     elif "response" in data:
                         return {"answer": data["response"]}
         except Exception:

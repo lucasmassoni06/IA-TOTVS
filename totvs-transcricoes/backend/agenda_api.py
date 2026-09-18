@@ -9,7 +9,7 @@ Rotas:
 Depende das tabelas criadas por seed_demo.py (agenda, nps_demo).
 A tabela `reunioes` NÃO é modificada em nenhum momento.
 """
-
+from typing import List, Dict, Any, Optional
 import os
 import sqlite3
 from pathlib import Path
@@ -27,6 +27,29 @@ NOTA_ALTA = 9             # a partir de quanto consideramos "alta performance"
 
 
 # ─── Infraestrutura ─────────────────────────────────────────────
+def _extrair_texto(data: dict) -> Optional[str]:
+    """Extrai o texto da resposta de qualquer provedor OpenAI-compatível."""
+    try:
+        msg = data["choices"][0]["message"]
+        conteudo = msg.get("content")
+        if isinstance(conteudo, str) and conteudo.strip():
+            return conteudo.strip()
+        razao = msg.get("reasoning_content")          # modelos com "thinking"
+        if isinstance(razao, str) and razao.strip():
+            return razao.strip()
+        if isinstance(conteudo, list):                # formato nativo do Gemini
+            partes = [p.get("text", "") for p in conteudo if isinstance(p, dict)]
+            if partes:
+                return " ".join(partes).strip()
+    except Exception:
+        pass
+    try:
+        texto = data.get("output_text")
+        if isinstance(texto, str) and texto.strip():
+            return texto.strip()
+    except Exception:
+        pass
+    return None
 
 def _conn():
     """Abre conexão com o banco. Erro claro se o arquivo não existir."""
@@ -294,7 +317,8 @@ def _insight_ia(cliente, f, camada, trechos):
             timeout=30,
         )
         r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"].strip()
+        texto = _extrair_texto(r.json())
+        return texto
     except Exception:
         return None
 
