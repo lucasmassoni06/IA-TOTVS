@@ -9,15 +9,26 @@ from pydantic import BaseModel
 import httpx
 import os
 from dotenv import load_dotenv
+from pathlib import Path
+from dotenv import load_dotenv
+
+
 
 from agenda_api import router as agenda_router
 
-load_dotenv()
+load_dotenv(Path(__file__).parent / ".env")
 
 logger = logging.getLogger("totvs")
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
+
+@app.get("/debug/ia")
+async def debug_ia():
+    api_key = (os.getenv("AI_API_KEY") or "").strip()
+    return {
+        "key_presente": bool(api_key),
+    }
 
 app.add_middleware(
     CORSMiddleware,

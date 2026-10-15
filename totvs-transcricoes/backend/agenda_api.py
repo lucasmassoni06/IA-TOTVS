@@ -12,8 +12,10 @@ A tabela `reunioes` NÃO é modificada em nenhum momento.
 from typing import List, Dict, Any, Optional
 import os
 import sqlite3
+import logging
 from pathlib import Path
-
+from pathlib import Path
+from dotenv import load_dotenv
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 
@@ -25,6 +27,8 @@ MAX_TRECHOS = 4           # quantos trechos de transcrição enviar à IA
 TAM_TRECHO = 300          # caracteres por trecho
 NOTA_ALTA = 9             # a partir de quanto consideramos "alta performance"
 
+load_dotenv(Path(__file__).parent / ".env")
+logger = logging.getLogger("totvs")
 
 # ─── Infraestrutura ─────────────────────────────────────────────
 def _extrair_texto(data: dict) -> Optional[str]:
@@ -272,15 +276,14 @@ def _insight_fallback(cliente, f, camada):
 
 def _insight_ia(cliente, f, camada, trechos):
     """
-    Chama a IA para redigir o insight. Devolve None se não houver chave
-    configurada ou se a chamada falhar (o chamador usa o fallback).
+    Chama a IA para redigir o insight e devolve o motivo se usar fallback.
     """
-    api_key = os.getenv("AI_API_KEY")
+    api_key = (os.getenv("AI_API_KEY") or "").strip()
     if not api_key:
-        return None
+        return None, "chave_ausente"
 
-    api_url = os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions")
-    modelo = os.getenv("AI_MODEL", "gpt-4o-mini")
+    api_url = (os.getenv("AI_API_URL") or "https://api.openai.com/v1/chat/completions").strip()
+    modelo = (os.getenv("AI_MODEL") or "gpt-4o-mini").strip()
 
     sistema = (
         "Você é analista de pré-venda da TOTVS e prepara executivos antes de "
@@ -314,13 +317,29 @@ def _insight_ia(cliente, f, camada, trechos):
                     {"role": "user", "content": dados},
                 ],
             },
-            timeout=30,
+            timeout=120,
         )
         r.raise_for_status()
         texto = _extrair_texto(r.json())
-        return texto
-    except Exception:
-        return None
+        if not texto:
+            logger.warning("A API de IA respondeu sem conteúdo utilizável para o insight")
+            return None, "sem_conteudo"
+        return texto, None
+    except httpx.TimeoutException:
+        logger.exception("Timeout na chamada à API de IA")
+        return None, "timeout"
+    except httpx.HTTPStatusError as exc:
+        logger.error("A API de IA respondeu com HTTP %s", exc.response.status_code)
+        return None, f"http_{exc.response.status_code}"
+    except httpx.InvalidURL:
+        logger.exception("URL inválida configurada para a API de IA")
+        return None, "url_invalida"
+    except httpx.RequestError:
+        logger.exception("Falha na chamada à API de IA — usando fallback local")
+        return None, "conexao"
+    except ValueError:
+        logger.exception("Resposta inválida da API de IA — usando fallback local")
+        return None, "resposta_invalida"
 
 
 # ─── Rota final ─────────────────────────────────────────────────
@@ -368,7 +387,7 @@ def contexto(id_meeting: str):
     finally:
         c.close()
 
-    insight = _insight_ia(perfil, fatos, camada, trechos)
+    insight, motivo = _insight_ia(perfil, fatos, camada, trechos)
     origem = "ia"
     if not insight:
         insight = _insight_fallback(perfil, fatos, camada)
@@ -379,6 +398,7 @@ def contexto(id_meeting: str):
         "fatos": {**_fatos_para_texto(fatos), "camada": camada},
         "insight": insight,
         "insight_origem": origem,
+        "insight_motivo": motivo,
         "trechos_usados": len(trechos),
         "aviso": "Notas de NPS simuladas para demonstração (origem='SIMULADO').",
     }
